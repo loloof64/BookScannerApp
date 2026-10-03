@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'image_processor.dart'; // Import the image processor
+
 void main() {
   runApp(const MyApp());
 }
@@ -31,13 +33,13 @@ class BookScannerPage extends StatefulWidget {
 }
 
 class _BookScannerPageState extends State<BookScannerPage> {
-  // Variable pour stocker l'image sélectionnée
+  // Variable to store the selected image
   XFile? _selectedImage;
 
-  // Variable pour indiquer si le traitement est en cours
+  // Variable to indicate if processing is in progress
   bool _isProcessing = false;
 
-  // Variable pour stocker l'image traitée
+  // Variable to store the processed image
   XFile? _processedImage;
 
   final ImagePicker _picker = ImagePicker();
@@ -69,13 +71,14 @@ class _BookScannerPageState extends State<BookScannerPage> {
       _isProcessing = true;
     });
 
-    // Simulate processing
-    await Future.delayed(const Duration(seconds: 2));
+    // Actual processing using OpenCV
+    final processedImagePath = await processBookImage(_selectedImage!.path);
 
     setState(() {
       _isProcessing = false;
-      _processedImage =
-          _selectedImage; // In a real app, this would be the result
+      if (processedImagePath != null) {
+        _processedImage = XFile(processedImagePath);
+      }
     });
   }
 
@@ -92,7 +95,7 @@ class _BookScannerPageState extends State<BookScannerPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Boutons pour sélectionner l'image
+            // Buttons to select the image
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -111,7 +114,7 @@ class _BookScannerPageState extends State<BookScannerPage> {
 
             const SizedBox(height: 20),
 
-            // Affichage de l'image sélectionnée
+            // Display of the selected image
             if (_isProcessing)
               const Expanded(child: Center(child: CircularProgressIndicator()))
             else if (_processedImage != null)
@@ -159,7 +162,7 @@ class _BookScannerPageState extends State<BookScannerPage> {
 
             const SizedBox(height: 20),
 
-            // Bouton de traitement
+            // Processing button
             if (_selectedImage != null)
               ElevatedButton.icon(
                 onPressed: _processImage,
