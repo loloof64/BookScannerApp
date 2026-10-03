@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'image_processor.dart'; // Import the image processor
 
@@ -67,19 +68,63 @@ class _BookScannerPageState extends State<BookScannerPage> {
   Future<void> _processImage() async {
     if (_selectedImage == null) return;
 
+    // Try to use document directory first
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final outputDir = Directory('${appDocDir.path}/scanned_photos');
+
+      if (!await outputDir.exists()) {
+        await outputDir.create(recursive: true);
+        debugPrint('Created output directory: ${outputDir.path}');
+      }
+    } catch (e) {
+      // If that fails, try temporary directory as fallback
+      try {
+        final tempDir = Directory.systemTemp;
+        final outputDir = Directory('${tempDir.path}/scanned_photos');
+
+        if (!await outputDir.exists()) {
+          await outputDir.create(recursive: true);
+          debugPrint('Created temporary directory: ${outputDir.path}');
+        }
+      } catch (e2) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: unable to create directory for images'),
+            ),
+          );
+        }
+        debugPrint('Error creating directories: $e2');
+        return;
+      }
+    }
+
     setState(() {
       _isProcessing = true;
     });
 
-    // Actual processing using OpenCV
-    final processedImagePath = await processBookImage(_selectedImage!.path);
+    try {
+      // Actual processing using OpenCV
+      final processedImagePath = await processBookImage(_selectedImage!.path);
 
-    setState(() {
-      _isProcessing = false;
-      if (processedImagePath != null) {
-        _processedImage = XFile(processedImagePath);
+      setState(() {
+        _isProcessing = false;
+        if (processedImagePath != null) {
+          _processedImage = XFile(processedImagePath);
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error during processing: $e')));
       }
-    });
+      debugPrint('Processing error: $e');
+    }
   }
 
   @override
