@@ -185,7 +185,12 @@ class _ReadBookContentState extends State<ReadBookContent> {
                     ),
                   );
                 },
-                onLongPress: () => _showDeleteOptions(context, fileName),
+                onLongPress: () => _showImageOptions(
+                  context,
+                  fileName,
+                  imageFiles,
+                  index,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6.0),
                   child: Image.file(
@@ -219,24 +224,168 @@ class _ReadBookContentState extends State<ReadBookContent> {
     );
   }
 
-  void _showDeleteOptions(BuildContext context, String fileName) {
+  void _showImageOptions(
+    BuildContext context,
+    String fileName,
+    List<String> imageFiles,
+    int currentIndex,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Image'),
-        content: Text('Delete "$fileName"?'),
+        title: const Text('Image Options'),
+        content: Text(fileName),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
+          if (imageFiles.length > 1)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showSwapDialog(context, currentIndex, imageFiles);
+              },
+              child: const Text('Swap with...'),
+            ),
           TextButton(
-            onPressed: () => _deleteImage(fileName),
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteImage(fileName);
+            },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
+  }
+
+  void _showSwapDialog(
+    BuildContext context,
+    int currentIndex,
+    List<String> imageFiles,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select image to swap with'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 4.0,
+              mainAxisSpacing: 4.0,
+            ),
+            itemCount: imageFiles.length,
+            itemBuilder: (context, index) {
+              if (index == currentIndex) {
+                return GestureDetector(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6.0),
+                      border: Border.all(color: Colors.blue, width: 2),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.file(
+                          File(p.join(
+                            widget.book.directory.path,
+                            imageFiles[index],
+                          )),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.broken_image, size: 40);
+                          },
+                        ),
+                        Container(
+                          color: Colors.black45,
+                          child: const Text(
+                            'Current',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  _swapPages(currentIndex, index);
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6.0),
+                  child: Image.file(
+                    File(p.join(
+                      widget.book.directory.path,
+                      imageFiles[index],
+                    )),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.broken_image, size: 40);
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _swapPages(int index1, int index2) async {
+    try {
+      final pagesFile = File(
+        p.join(widget.book.directory.path, 'pages_images.txt'),
+      );
+
+      if (!await pagesFile.exists()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('pages_images.txt not found')),
+        );
+        return;
+      }
+
+      final lines = await pagesFile.readAsLines();
+      if (index1 < lines.length && index2 < lines.length) {
+        // Just swap the order in pages_images.txt, don't rename files
+        final temp = lines[index1];
+        lines[index1] = lines[index2];
+        lines[index2] = temp;
+
+        await pagesFile.writeAsString('${lines.join('\n')}\n');
+        _loadImageFiles();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Images swapped')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error swapping pages: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error swapping images: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _deleteImage(String fileName) async {

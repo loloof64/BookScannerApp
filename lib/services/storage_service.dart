@@ -41,8 +41,14 @@ class StorageService {
             .where((f) => imageRegex.hasMatch(f.path))
             .toList();
 
-        // Sort files by name (e.g., page_001.jpg, page_002.jpg)
-        files.sort((a, b) => a.path.compareTo(b.path));
+        // Order comes from pages_images.txt; fall back to name for legacy books
+        final order = await _readPageOrder(entity);
+        files.sort((a, b) {
+          final ia = order.indexOf(p.basename(a.path));
+          final ib = order.indexOf(p.basename(b.path));
+          if (ia == -1 || ib == -1) return a.path.compareTo(b.path);
+          return ia.compareTo(ib);
+        });
 
         final stat = await entity.stat();
 
@@ -60,6 +66,15 @@ class StorageService {
     // Sort books by most recently modified
     books.sort((a, b) => b.lastModified.compareTo(a.lastModified));
     return books;
+  }
+
+  static Future<List<String>> _readPageOrder(Directory bookDirectory) async {
+    final pagesFile = File(p.join(bookDirectory.path, 'pages_images.txt'));
+    if (!await pagesFile.exists()) return [];
+    return (await pagesFile.readAsLines())
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
   }
 
   /// Creates a unique book directory. Handles automatic renaming if the directory already exists.
@@ -105,19 +120,12 @@ class StorageService {
     required String sourceImagePath,
   }) async {
     final pagesFile = File(p.join(bookDirectory.path, 'pages_images.txt'));
-    int nextIndex = 1;
 
-    if (await pagesFile.exists()) {
-      try {
-        final lines = await pagesFile.readAsLines();
-        nextIndex = lines.where((line) => line.trim().isNotEmpty).length + 1;
-      } catch (e) {
-        debugPrint('Error reading pages_images.txt: $e');
-      }
-    }
-
-    final paddedIndex = nextIndex.toString().padLeft(3, '0');
-    final targetPath = p.join(bookDirectory.path, 'page_$paddedIndex.jpg');
+    // Unique, order-independent name: the order lives only in pages_images.txt
+    final targetPath = p.join(
+      bookDirectory.path,
+      'page_${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
 
     final sourceFile = File(sourceImagePath);
     final copiedFile = await sourceFile.copy(targetPath);
@@ -149,33 +157,13 @@ class StorageService {
       }
 
       final lines = await pagesFile.readAsLines();
-      final remainingFiles =
-          lines.where((line) => line.trim() != fileName).toList();
-
-      // Renumber remaining pages sequentially
-      final newPages = <String>[];
-      for (int i = 0; i < remainingFiles.length; i++) {
-        final oldFileName = remainingFiles[i].trim();
-        if (oldFileName.isEmpty) continue;
-
-        final newIndex = (i + 1).toString().padLeft(3, '0');
-        final newFileName = 'page_$newIndex.jpg';
-
-        // Rename the file if needed
-        if (oldFileName != newFileName) {
-          final oldPath = p.join(bookDirectory.path, oldFileName);
-          final newPath = p.join(bookDirectory.path, newFileName);
-          final oldFile = File(oldPath);
-          if (await oldFile.exists()) {
-            await oldFile.rename(newPath);
-          }
-        }
-
-        newPages.add(newFileName);
-      }
-
-      // Write updated pages_images.txt
-      await pagesFile.writeAsString('${newPages.join('\n')}\n');
+      final remaining = lines
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && l != fileName)
+          .toList();
+      await pagesFile.writeAsString(
+        remaining.isEmpty ? '' : '${remaining.join('\n')}\n',
+      );
 
       return true;
     } catch (e) {
