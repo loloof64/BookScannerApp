@@ -32,7 +32,7 @@ void main() {
     final doc = pw.Document();
     var peak = 0;
     for (final path in paths) {
-      final img = await cv.imreadAsync(path);
+      final img = await cv.imreadAsync(path, flags: cv.IMREAD_GRAYSCALE);
       final scale = 1800 / (img.width > img.height ? img.width : img.height);
       final small = await cv.resizeAsync(img, (
         (img.width * scale).round(),

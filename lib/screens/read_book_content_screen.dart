@@ -105,10 +105,13 @@ class _ReadBookContentState extends State<ReadBookContent> {
     return {'title': title, 'authors': authors};
   }
 
-  /// Downscales (max 1800px) and re-encodes as JPEG q70. Also bakes in EXIF
+  /// Grayscale unless [color] (covers), downscales (max 1800px), JPEG q70. Bakes in EXIF
   /// rotation.
-  Future<Uint8List> _compressPage(String path) async {
-    final img = await cv.imreadAsync(path);
+  Future<Uint8List> _compressPage(String path, {required bool color}) async {
+    final img = await cv.imreadAsync(
+      path,
+      flags: color ? cv.IMREAD_COLOR : cv.IMREAD_GRAYSCALE,
+    );
     cv.Mat? small;
     try {
       final longSide = img.width > img.height ? img.width : img.height;
@@ -165,8 +168,13 @@ class _ReadBookContentState extends State<ReadBookContent> {
           ),
         ),
       );
-      for (final name in fileNames) {
-        final bytes = await _compressPage(p.join(widget.book.directory.path, name));
+      for (final (i, name) in fileNames.indexed) {
+        // First and last pages are the covers: keep them in color
+        final isCover = i == 0 || i == fileNames.length - 1;
+        final bytes = await _compressPage(
+          p.join(widget.book.directory.path, name),
+          color: isCover,
+        );
         progress.value++;
         doc.addPage(pw.Page(
           margin: pw.EdgeInsets.zero,
