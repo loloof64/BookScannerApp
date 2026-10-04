@@ -29,7 +29,6 @@ class _BookListScreenState extends State<BookListScreen> {
     });
   }
 
-  /// Dialog to prompt the user for a new book name
   Future<void> _showCreateBookDialog() async {
     final controller = TextEditingController();
 
@@ -64,13 +63,49 @@ class _BookListScreenState extends State<BookListScreen> {
     );
 
     if (bookTitle != null && mounted) {
-      // Create folder with unique name handling
       await StorageService.createUniqueBookDirectory(bookTitle);
-
       if (!mounted) return;
-
-      // Refresh listing after returning
       _refreshBooks();
+    }
+  }
+
+  void _showDeleteOptions(BookModel book) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Book'),
+        content: Text('Delete "${book.name}" and all its contents?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteBook(book),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteBook(BookModel book) async {
+    Navigator.pop(context);
+    final success = await StorageService.deleteBook(
+      bookDirectory: book.directory,
+    );
+
+    if (mounted) {
+      if (success) {
+        _refreshBooks();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Book deleted')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete book')),
+        );
+      }
     }
   }
 
@@ -124,56 +159,60 @@ class _BookListScreenState extends State<BookListScreen> {
                   ? book.pageFiles.first
                   : null;
 
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 6.0),
-                child: ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: 50,
-                      height: 60,
-                      color: Colors.grey[300],
-                      child: coverFile != null
-                          ? Image.file(coverFile, fit: BoxFit.cover)
-                          : const Icon(Icons.book, color: Colors.grey),
+              return GestureDetector(
+                onLongPress: () => _showDeleteOptions(book),
+                child: Card(
+                  margin: const EdgeInsets.symmetric(vertical: 6.0),
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        width: 50,
+                        height: 60,
+                        color: Colors.grey[300],
+                        child: coverFile != null
+                            ? Image.file(coverFile, fit: BoxFit.cover)
+                            : const Icon(Icons.book, color: Colors.grey),
+                      ),
                     ),
-                  ),
-                  title: Text(
-                    book.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: FutureBuilder<int>(
-                    future: () async {
-                      final metadata = File(
-                        p.join(book.directory.path, 'metadata.txt'),
-                      );
-                      if (await metadata.exists()) {
-                        try {
-                          final lines = await metadata.readAsLines();
-                          return lines
-                              .where((line) => line.trim().isNotEmpty)
-                              .length;
-                        } catch (e) {
-                          return book.pageFiles.length;
+                    title: Text(
+                      book.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: FutureBuilder<int>(
+                      future: () async {
+                        final metadata = File(
+                          p.join(book.directory.path, 'metadata.txt'),
+                        );
+                        if (await metadata.exists()) {
+                          try {
+                            final lines = await metadata.readAsLines();
+                            return lines
+                                .where((line) => line.trim().isNotEmpty)
+                                .length;
+                          } catch (e) {
+                            return book.pageFiles.length;
+                          }
                         }
-                      }
-                      return book.pageFiles.length;
-                    }(),
-                    builder: (context, snapshot) {
-                      final pageCount = snapshot.data ?? book.pageFiles.length;
-                      return Text('$pageCount page(s)');
+                        return book.pageFiles.length;
+                      }(),
+                      builder: (context, snapshot) {
+                        final pageCount =
+                            snapshot.data ?? book.pageFiles.length;
+                        return Text('$pageCount page(s)');
+                      },
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReadBookContent(book: book),
+                        ),
+                      );
+                      _refreshBooks();
                     },
                   ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReadBookContent(book: book),
-                      ),
-                    );
-                    _refreshBooks();
-                  },
                 ),
               );
             },

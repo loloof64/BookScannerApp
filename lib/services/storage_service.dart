@@ -170,4 +170,17 @@ class StorageService {
       return false;
     }
   }
+
+  /// Deletes an entire book directory and all its contents
+  static Future<bool> deleteBook({required Directory bookDirectory}) async {
+    try {
+      if (await bookDirectory.exists()) {
+        await bookDirectory.delete(recursive: true);
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting book: $e');
+      return false;
+    }
+  }
 }
