@@ -1,6 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:path/path.dart' as p;
 
 import '../models/book_model.dart';
@@ -101,6 +105,92 @@ class _ReadBookContentState extends State<ReadBookContent> {
     return {'title': title, 'authors': authors};
   }
 
+  /// Downscales (max 1800px) and re-encodes as JPEG q80 (~250 KB/page) so
+  /// 400 pages stay around 100 MB in memory. Also bakes in EXIF rotation.
+  Future<Uint8List> _compressPage(String path) async {
+    final img = await cv.imreadAsync(path);
+    cv.Mat? small;
+    try {
+      final longSide = img.width > img.height ? img.width : img.height;
+      final scale = 1800 / longSide;
+      if (scale < 1) {
+        small = await cv.resizeAsync(
+          img,
+          ((img.width * scale).round(), (img.height * scale).round()),
+          interpolation: cv.INTER_AREA,
+        );
+      }
+      final (_, bytes) = await cv.imencodeAsync(
+        '.jpg',
+        small ?? img,
+        params: cv.VecI32.fromList([cv.IMWRITE_JPEG_QUALITY, 80]),
+      );
+      return bytes;
+    } finally {
+      small?.dispose();
+      img.dispose();
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final fileNames = await _fetchImageFiles();
+      if (fileNames.isEmpty) {
+        messenger.showSnackBar(const SnackBar(content: Text('No pages to export')));
+        return;
+      }
+
+      final title = (await _loadBookMetadata())['title']!;
+      final doc = pw.Document(title: title);
+      final progress = ValueNotifier<int>(0);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: ValueListenableBuilder<int>(
+              valueListenable: progress,
+              builder: (_, done, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(value: done / fileNames.length),
+                  const SizedBox(height: 12),
+                  Text('Building PDF… $done / ${fileNames.length}'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final name in fileNames) {
+        final bytes = await _compressPage(p.join(widget.book.directory.path, name));
+        progress.value++;
+        doc.addPage(pw.Page(
+          margin: pw.EdgeInsets.zero,
+          build: (_) => pw.Center(child: pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain)),
+        ));
+      }
+
+      final pdfBytes = await doc.save();
+      if (mounted) Navigator.pop(context); // progress dialog
+      final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final path = await FilePicker.saveFile(
+        dialogTitle: 'Export PDF',
+        fileName: '$safeTitle.pdf',
+        bytes: pdfBytes,
+      );
+      if (path != null) {
+        messenger.showSnackBar(const SnackBar(content: Text('PDF exported')));
+      }
+    } catch (e) {
+      if (mounted) Navigator.popUntil(context, (r) => r is! PopupRoute);
+      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,6 +214,11 @@ class _ReadBookContentState extends State<ReadBookContent> {
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Export PDF',
+            onPressed: _exportPdf,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadImageFiles,
