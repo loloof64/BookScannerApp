@@ -2,6 +2,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -96,15 +97,19 @@ class StorageService {
     required Directory bookDirectory,
     required String sourceImagePath,
   }) async {
-    final imageRegex = RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false);
-    final existingFiles = bookDirectory
-        .listSync()
-        .whereType<File>()
-        .where((f) => imageRegex.hasMatch(f.path))
-        .toList();
+    final metadataFile = File(p.join(bookDirectory.path, 'metadata.txt'));
+    int nextIndex = 1;
 
-    final nextIndex = existingFiles.length + 1;
-    final paddedIndex = nextIndex.toString().padLeft(3, '0'); // page_001.jpg
+    if (await metadataFile.exists()) {
+      try {
+        final lines = await metadataFile.readAsLines();
+        nextIndex = lines.where((line) => line.trim().isNotEmpty).length + 1;
+      } catch (e) {
+        debugPrint('Error reading metadata.txt: $e');
+      }
+    }
+
+    final paddedIndex = nextIndex.toString().padLeft(3, '0');
     final targetPath = p.join(bookDirectory.path, 'page_$paddedIndex.jpg');
 
     final sourceFile = File(sourceImagePath);

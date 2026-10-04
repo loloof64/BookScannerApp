@@ -59,7 +59,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
 
     // If no metadata or error, get all images from the book folder
     if (files.isEmpty) {
-      final dir = Directory(widget.book.name);
+      final dir = Directory(widget.book.directory.path);
       if (await dir.exists()) {
         final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
         final entries = await dir.list().toList();
