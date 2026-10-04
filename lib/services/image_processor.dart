@@ -4,34 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:path/path.dart' as p;
 
-/// Warps, straightens, and applies targeted side-trimming based on actual boundaries.
-Future<String?> processBookImage(String imagePath) async {
-  cv.Mat? img;
+// Step 1: Preprocess image (grayscale, blur, morphology, threshold, edges)
+Future<_PreprocessResult> _preprocessImage(cv.Mat img) async {
   cv.Mat? gray;
   cv.Mat? blurred;
+  cv.Mat? kernel;
   cv.Mat? thresh;
   cv.Mat? edged;
-  cv.Mat? kernel;
-  cv.Mat? warpMatrix;
-  cv.Mat? warpedColor;
-  cv.Mat? croppedResult;
-  cv.Mat? enhancedColor;
-  cv.Mat? gaussian;
-  cv.Mat? finalResult;
 
   try {
-    // 1. Read original color image
-    img = cv.imread(imagePath);
-    if (img.isEmpty) return null;
-
-    final originalWidth = img.cols;
-    final originalHeight = img.rows;
-
-    // 2. Grayscale & Blur
     gray = await cv.cvtColorAsync(img, cv.COLOR_BGR2GRAY);
     blurred = await cv.gaussianBlurAsync(gray, (9, 9), 0);
 
-    // 3. Morphological Gradient: catches subtle paper-to-background contrast
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
     final gradient = await cv.morphologyExAsync(
       blurred,
@@ -39,7 +23,6 @@ Future<String?> processBookImage(String imagePath) async {
       kernel,
     );
 
-    // 4. Otsu Thresholding on Gradient
     final (_, thresholdMat) = await cv.thresholdAsync(
       gradient,
       0,
@@ -49,12 +32,103 @@ Future<String?> processBookImage(String imagePath) async {
     thresh = thresholdMat;
     gradient.dispose();
 
-    // 5. Canny Edge Detection
     edged = await cv.cannyAsync(thresh, 50, 150);
 
-    // 6. Find Contours
+    return _PreprocessResult(
+      edged: edged,
+      gray: gray,
+      blurred: blurred,
+      kernel: kernel,
+      thresh: thresh,
+    );
+  } catch (e) {
+    gray?.dispose();
+    blurred?.dispose();
+    kernel?.dispose();
+    thresh?.dispose();
+    edged?.dispose();
+    rethrow;
+  }
+}
+
+class _PreprocessResult {
+  final cv.Mat edged;
+  final cv.Mat? gray;
+  final cv.Mat? blurred;
+  final cv.Mat? kernel;
+  final cv.Mat? thresh;
+
+  _PreprocessResult({
+    required this.edged,
+    required this.gray,
+    required this.blurred,
+    required this.kernel,
+    required this.thresh,
+  });
+
+  void dispose() {
+    gray?.dispose();
+    blurred?.dispose();
+    kernel?.dispose();
+    thresh?.dispose();
+    edged.dispose();
+  }
+}
+
+// Step 2: Enhance image (contrast, sharpening)
+Future<cv.Mat> _enhanceImage(cv.Mat source) async {
+  cv.Mat? enhanced;
+  cv.Mat? gaussian;
+
+  try {
+    enhanced = await cv.convertScaleAbsAsync(
+      source,
+      alpha: 1.10,
+      beta: 5,
+    );
+
+    gaussian = await cv.gaussianBlurAsync(enhanced, (0, 0), 3);
+    final sharpened = await cv.addWeightedAsync(
+      enhanced,
+      1.20,
+      gaussian,
+      -0.20,
+      0,
+    );
+
+    gaussian.dispose();
+    enhanced.dispose();
+    return sharpened;
+  } catch (e) {
+    enhanced?.dispose();
+    gaussian?.dispose();
+    rethrow;
+  }
+}
+
+/// Warps, straightens, and applies targeted side-trimming based on actual boundaries.
+Future<String?> processBookImage(String imagePath) async {
+  cv.Mat? img;
+  cv.Mat? warpMatrix;
+  cv.Mat? warpedColor;
+  cv.Mat? croppedResult;
+  cv.Mat? finalResult;
+  _PreprocessResult? preprocessed;
+
+  try {
+    // 1. Read original color image
+    img = cv.imread(imagePath);
+    if (img.isEmpty) return null;
+
+    final originalWidth = img.cols;
+    final originalHeight = img.rows;
+
+    // 2. Preprocess (grayscale, blur, threshold, edges)
+    preprocessed = await _preprocessImage(img);
+
+    // 3. Find Contours
     final (contours, _) = await cv.findContoursAsync(
-      edged,
+      preprocessed.edged,
       cv.RETR_EXTERNAL,
       cv.CHAIN_APPROX_SIMPLE,
     );
@@ -138,22 +212,8 @@ Future<String?> processBookImage(String imagePath) async {
     final roi = cv.Rect(cropLeft, cropTop, cropWidth, cropHeight);
     croppedResult = warpedColor.region(roi);
 
-    // 11. Contrast & Brightness Enhancement
-    enhancedColor = await cv.convertScaleAbsAsync(
-      croppedResult,
-      alpha: 1.10,
-      beta: 5,
-    );
-
-    // 12. Sharpening
-    gaussian = await cv.gaussianBlurAsync(enhancedColor, (0, 0), 3);
-    finalResult = await cv.addWeightedAsync(
-      enhancedColor,
-      1.20,
-      gaussian,
-      -0.20,
-      0,
-    );
+    // 4. Enhance (contrast, brightness, sharpening)
+    finalResult = await _enhanceImage(croppedResult);
 
     // 13. Save output image
     final directory = p.dirname(imagePath);
@@ -168,16 +228,10 @@ Future<String?> processBookImage(String imagePath) async {
     return null;
   } finally {
     img?.dispose();
-    gray?.dispose();
-    blurred?.dispose();
-    thresh?.dispose();
-    edged?.dispose();
-    kernel?.dispose();
+    preprocessed?.dispose();
     warpMatrix?.dispose();
     warpedColor?.dispose();
     croppedResult?.dispose();
-    enhancedColor?.dispose();
-    gaussian?.dispose();
     finalResult?.dispose();
   }
 }

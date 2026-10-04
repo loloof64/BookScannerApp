@@ -33,15 +33,11 @@ class StorageService {
         final folderName = p.basename(entity.path);
 
         // Fetch image files inside the book folder
+        final imageRegex = RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false);
         final files = entity
             .listSync()
             .whereType<File>()
-            .where(
-              (f) => RegExp(
-                r'\.(jpg|jpeg|png)$',
-                caseSensitive: false,
-              ).hasMatch(f.path),
-            )
+            .where((f) => imageRegex.hasMatch(f.path))
             .toList();
 
         // Sort files by name (e.g., page_001.jpg, page_002.jpg)
@@ -100,15 +96,11 @@ class StorageService {
     required Directory bookDirectory,
     required String sourceImagePath,
   }) async {
+    final imageRegex = RegExp(r'\.(jpg|jpeg|png)$', caseSensitive: false);
     final existingFiles = bookDirectory
         .listSync()
         .whereType<File>()
-        .where(
-          (f) => RegExp(
-            r'\.(jpg|jpeg|png)$',
-            caseSensitive: false,
-          ).hasMatch(f.path),
-        )
+        .where((f) => imageRegex.hasMatch(f.path))
         .toList();
 
     final nextIndex = existingFiles.length + 1;
