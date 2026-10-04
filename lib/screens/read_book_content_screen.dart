@@ -132,7 +132,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
             itemCount: imageFiles.length,
             itemBuilder: (context, index) {
               final fileName = imageFiles[index];
-              final file = File(p.join(widget.book.name, fileName));
+              final file = File(p.join(widget.book.directory.path, fileName));
 
               return GestureDetector(
                 onTap: () {
