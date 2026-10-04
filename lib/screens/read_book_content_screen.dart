@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/book_model.dart';
+import '../services/storage_service.dart';
 import 'add_scan_to_book_screen.dart';
 
 class ReadBookContent extends StatefulWidget {
@@ -143,6 +144,8 @@ class _ReadBookContentState extends State<ReadBookContent> {
                       builder: (context) => FullScreenImage(
                         imagePath: file.path,
                         fileName: fileName,
+                        bookDirectory: widget.book.directory,
+                        onImageDeleted: _loadImageFiles,
                       ),
                     ),
                   );
@@ -182,17 +185,30 @@ class _ReadBookContentState extends State<ReadBookContent> {
 class FullScreenImage extends StatelessWidget {
   final String imagePath;
   final String fileName;
+  final Directory bookDirectory;
+  final VoidCallback onImageDeleted;
 
   const FullScreenImage({
     super.key,
     required this.imagePath,
     required this.fileName,
+    required this.bookDirectory,
+    required this.onImageDeleted,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(fileName), centerTitle: true),
+      appBar: AppBar(
+        title: Text(fileName),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () => _showDeleteConfirmation(context),
+          ),
+        ],
+      ),
       body: InteractiveViewer(
         child: Image.file(
           File(imagePath),
@@ -203,5 +219,47 @@ class FullScreenImage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Image'),
+        content: Text('Delete "$fileName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteImage(context),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteImage(BuildContext context) async {
+    Navigator.pop(context);
+    final success = await StorageService.deletePageFromBook(
+      bookDirectory: bookDirectory,
+      fileName: fileName,
+    );
+
+    if (context.mounted) {
+      if (success) {
+        onImageDeleted();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image deleted')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete image')),
+        );
+      }
+    }
   }
 }
