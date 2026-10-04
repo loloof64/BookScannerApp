@@ -87,9 +87,10 @@ class _CropOverlayScreenState extends State<CropOverlayScreen> {
                     // Draggable corner indicators
                     for (int i = 0; i < corners.length; i++)
                       Positioned(
-                        left: corners[i].dx - 16,
-                        top: corners[i].dy - 16,
+                        left: corners[i].dx - 20,
+                        top: corners[i].dy - 20,
                         child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTapDown: (details) {
                             setState(() {
                               draggingCornerIndex = i;
@@ -123,8 +124,8 @@ class _CropOverlayScreenState extends State<CropOverlayScreen> {
                             });
                           },
                           child: Container(
-                            width: 32,
-                            height: 32,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: Colors.blue,
                               shape: BoxShape.circle,
@@ -132,7 +133,7 @@ class _CropOverlayScreenState extends State<CropOverlayScreen> {
                             ),
                             child: const Icon(
                               Icons.drag_indicator,
-                              size: 16,
+                              size: 18,
                               color: Colors.white,
                             ),
                           ),
