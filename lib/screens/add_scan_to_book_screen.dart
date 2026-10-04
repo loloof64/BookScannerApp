@@ -6,7 +6,8 @@ import 'package:path/path.dart' as p;
 
 import '../models/book_model.dart';
 import '../services/storage_service.dart';
-import 'crop_overlay_screen.dart'; // Import the crop overlay screen
+import 'crop_overlay_screen.dart';
+import 'crop_preview_screen.dart';
 
 class AddScanToBookScreen extends StatefulWidget {
   final BookModel
@@ -59,46 +60,30 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
       );
 
       if (result != null && result is List<Offset>) {
-        // In a real implementation, this would:
-        // 1. Correct perspective based on the corner points
-        // 2. Crop to the document edges
-        // 3. Enhance the image quality
-
-        // For now, we'll just save the original image (in a real app you'd process it)
-        final savedFile = await StorageService.savePageToBook(
-          bookDirectory: widget.targetBook.directory,
-          sourceImagePath: _pickedImagePath!,
-        );
-
-        // Update metadata.txt file with new image name
-        final fileName = p.basename(savedFile.path);
-        final metadataFile = File(
-          p.join(widget.targetBook.directory.path, 'metadata.txt'),
-        );
-
-        // Create the metadata file if it doesn't exist
-        if (!await metadataFile.exists()) {
-          await metadataFile.create(recursive: true);
-        }
-
-        // Append the new filename to metadata.txt
-        await metadataFile.writeAsString('$fileName\n', mode: FileMode.append);
-
-        setState(() {
-          _isLoading = false;
-          _pickedImagePath = null;
-        });
+        setState(() => _isLoading = false);
 
         if (!mounted) return;
 
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Page added successfully!')),
+        // Show preview screen
+        final processedImagePath = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CropPreviewScreen(
+              imagePath: _pickedImagePath!,
+              corners: result,
+            ),
+          ),
         );
+
+        if (processedImagePath != null && processedImagePath is String) {
+          // User confirmed crop, save the image
+          await _saveImage(processedImagePath);
+        } else {
+          // User clicked Redo Crop, stay on this screen
+          setState(() => _pickedImagePath = _pickedImagePath);
+        }
       } else {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       setState(() {
@@ -240,5 +225,44 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
               ],
             ),
     );
+  }
+
+  Future<void> _saveImage(String imagePath) async {
+    try {
+      setState(() => _isLoading = true);
+
+      final savedFile = await StorageService.savePageToBook(
+        bookDirectory: widget.targetBook.directory,
+        sourceImagePath: imagePath,
+      );
+
+      final fileName = p.basename(savedFile.path);
+      final metadataFile = File(
+        p.join(widget.targetBook.directory.path, 'metadata.txt'),
+      );
+
+      if (!await metadataFile.exists()) {
+        await metadataFile.create(recursive: true);
+      }
+
+      await metadataFile.writeAsString('$fileName\n', mode: FileMode.append);
+
+      setState(() {
+        _isLoading = false;
+        _pickedImagePath = null;
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Page added successfully!')),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      debugPrint('Error saving image: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 }

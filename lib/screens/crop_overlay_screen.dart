@@ -25,6 +25,10 @@ class _CropOverlayScreenState extends State<CropOverlayScreen> {
   int? draggingCornerIndex;
   Offset dragStartOffset = Offset.zero;
 
+  Future<void> _showPreviewAndConfirm(BuildContext context) async {
+    Navigator.of(context).pop(corners);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -33,18 +37,7 @@ class _CropOverlayScreenState extends State<CropOverlayScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
-            onPressed: () async {
-              // Process the cropped image and save it to a book
-              try {
-                // In a real implementation, you would process the image here
-                // For now we'll just return to add_scan_to_book_screen
-                Navigator.of(context).pop(corners);
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Failed to process image')),
-                );
-              }
-            },
+            onPressed: () => _showPreviewAndConfirm(context),
           ),
         ],
       ),
