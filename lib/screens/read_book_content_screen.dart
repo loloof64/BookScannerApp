@@ -35,7 +35,6 @@ class _ReadBookContentState extends State<ReadBookContent> {
   Future<List<String>> _fetchImageFiles() async {
     final List<String> files = [];
 
-    // Read metadata.txt to get the order of images
     final metadataFile = File(
       p.join(widget.book.directory.path, 'metadata.txt'),
     );
@@ -53,12 +52,10 @@ class _ReadBookContentState extends State<ReadBookContent> {
           }
         }
       } catch (e) {
-        // If metadata.txt fails to read, fallback to reading all image files
         debugPrint('Error reading metadata.txt: $e');
       }
     }
 
-    // If no metadata or error, get all images from the book folder
     if (files.isEmpty) {
       final dir = Directory(widget.book.directory.path);
       if (await dir.exists()) {
@@ -192,7 +189,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => _deleteImage(context, fileName),
+            onPressed: () => _deleteImage(fileName),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -200,7 +197,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
     );
   }
 
-  Future<void> _deleteImage(BuildContext context, String fileName) async {
+  Future<void> _deleteImage(String fileName) async {
     Navigator.pop(context);
     final success = await StorageService.deletePageFromBook(
       bookDirectory: widget.book.directory,
