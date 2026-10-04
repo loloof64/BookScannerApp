@@ -4,21 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
-  group('Metadata reading', () {
+  group('Pages images reading', () {
     test(
-        'counts non-empty lines in metadata.txt to get page count',
+        'counts non-empty lines in pages_images.txt to get page count',
         () async {
-      // Setup: create a temporary book directory with metadata.txt
-      final tempDir = await Directory.systemTemp.createTemp('metadata_test_');
-      final metadataFile = File(p.join(tempDir.path, 'metadata.txt'));
+      // Setup: create a temporary book directory with pages_images.txt
+      final tempDir = await Directory.systemTemp.createTemp('pages_test_');
+      final pagesFile = File(p.join(tempDir.path, 'pages_images.txt'));
 
-      // Create metadata.txt with 5 pages and some blank lines
-      await metadataFile.writeAsString(
+      // Create pages_images.txt with 5 pages and some blank lines
+      await pagesFile.writeAsString(
         'page_001.jpg\npage_002.jpg\n\npage_003.jpg\n\n\npage_004.jpg\npage_005.jpg\n',
       );
 
       // Read and count non-empty lines
-      final lines = await metadataFile.readAsLines();
+      final lines = await pagesFile.readAsLines();
       final pageCount =
           lines.where((line) => line.trim().isNotEmpty).length;
 

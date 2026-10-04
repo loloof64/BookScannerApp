@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as p;
 
 import '../models/book_model.dart';
 import '../services/storage_service.dart';
@@ -217,7 +216,7 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
                       if (_pickedImagePath != null)
                         ElevatedButton(
                           onPressed: _processAndSaveImage,
-                          child: const Text('Save Page'),
+                          child: const Text('Crop page'),
                         ),
                     ],
                   ),
@@ -231,21 +230,10 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
     try {
       setState(() => _isLoading = true);
 
-      final savedFile = await StorageService.savePageToBook(
+      await StorageService.savePageToBook(
         bookDirectory: widget.targetBook.directory,
         sourceImagePath: imagePath,
       );
-
-      final fileName = p.basename(savedFile.path);
-      final metadataFile = File(
-        p.join(widget.targetBook.directory.path, 'metadata.txt'),
-      );
-
-      if (!await metadataFile.exists()) {
-        await metadataFile.create(recursive: true);
-      }
-
-      await metadataFile.writeAsString('$fileName\n', mode: FileMode.append);
 
       setState(() {
         _isLoading = false;
@@ -254,9 +242,9 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Page added successfully!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Page added successfully!')));
     } catch (e) {
       setState(() => _isLoading = false);
       debugPrint('Error saving image: $e');

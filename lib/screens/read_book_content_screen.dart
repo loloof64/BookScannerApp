@@ -35,13 +35,13 @@ class _ReadBookContentState extends State<ReadBookContent> {
   Future<List<String>> _fetchImageFiles() async {
     final List<String> files = [];
 
-    final metadataFile = File(
-      p.join(widget.book.directory.path, 'metadata.txt'),
+    final pagesFile = File(
+      p.join(widget.book.directory.path, 'pages_images.txt'),
     );
 
-    if (await metadataFile.exists()) {
+    if (await pagesFile.exists()) {
       try {
-        final lines = await metadataFile.readAsLines();
+        final lines = await pagesFile.readAsLines();
         for (final line in lines) {
           final fileName = line.trim();
           if (fileName.isNotEmpty) {
@@ -52,7 +52,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
           }
         }
       } catch (e) {
-        debugPrint('Error reading metadata.txt: $e');
+        debugPrint('Error reading pages_images.txt: $e');
       }
     }
 
@@ -76,11 +76,52 @@ class _ReadBookContentState extends State<ReadBookContent> {
     return files;
   }
 
+  Future<Map<String, String>> _loadBookMetadata() async {
+    final metadataFile = File(
+      p.join(widget.book.directory.path, 'metadata.txt'),
+    );
+
+    String title = widget.book.name;
+    String authors = '';
+
+    if (await metadataFile.exists()) {
+      try {
+        final lines = await metadataFile.readAsLines();
+        if (lines.isNotEmpty && lines[0].trim().isNotEmpty) {
+          title = lines[0].trim();
+        }
+        if (lines.length > 1 && lines[1].trim().isNotEmpty) {
+          authors = lines[1].trim();
+        }
+      } catch (e) {
+        debugPrint('Error reading metadata.txt: $e');
+      }
+    }
+
+    return {'title': title, 'authors': authors};
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.book.name),
+        title: FutureBuilder<Map<String, String>>(
+          future: _loadBookMetadata(),
+          builder: (context, snapshot) {
+            final title = snapshot.data?['title'] ?? widget.book.name;
+            final authors = snapshot.data?['authors'] ?? '';
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(title),
+                if (authors.isNotEmpty)
+                  Text(authors,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            );
+          },
+        ),
         centerTitle: true,
         actions: [
           IconButton(

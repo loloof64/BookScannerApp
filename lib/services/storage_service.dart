@@ -64,25 +64,32 @@ class StorageService {
 
   /// Creates a unique book directory. Handles automatic renaming if the directory already exists.
   /// Example: "My Book" -> "My Book (1)" -> "My Book (2)"
-  static Future<BookModel> createUniqueBookDirectory(
-    String requestedTitle,
-  ) async {
+  /// Creates metadata.txt with title (line 1) and authors (line 2).
+  static Future<BookModel> createUniqueBookDirectory({
+    required String folderName,
+    required String title,
+    required String authors,
+  }) async {
     final booksDir = await getBooksDirectory();
-    final sanitizedTitle = requestedTitle.trim().isEmpty
+    final sanitizedName = folderName.trim().isEmpty
         ? 'New Book'
-        : requestedTitle.trim();
+        : folderName.trim();
 
-    String candidateName = sanitizedTitle;
+    String candidateName = sanitizedName;
     Directory targetDir = Directory(p.join(booksDir.path, candidateName));
     int counter = 1;
 
     while (await targetDir.exists()) {
-      candidateName = '$sanitizedTitle ($counter)';
+      candidateName = '$sanitizedName ($counter)';
       targetDir = Directory(p.join(booksDir.path, candidateName));
       counter++;
     }
 
     await targetDir.create(recursive: true);
+
+    // Create metadata.txt with title and authors
+    final metadataFile = File(p.join(targetDir.path, 'metadata.txt'));
+    await metadataFile.writeAsString('$title\n$authors\n');
 
     return BookModel(
       name: candidateName,
@@ -97,15 +104,15 @@ class StorageService {
     required Directory bookDirectory,
     required String sourceImagePath,
   }) async {
-    final metadataFile = File(p.join(bookDirectory.path, 'metadata.txt'));
+    final pagesFile = File(p.join(bookDirectory.path, 'pages_images.txt'));
     int nextIndex = 1;
 
-    if (await metadataFile.exists()) {
+    if (await pagesFile.exists()) {
       try {
-        final lines = await metadataFile.readAsLines();
+        final lines = await pagesFile.readAsLines();
         nextIndex = lines.where((line) => line.trim().isNotEmpty).length + 1;
       } catch (e) {
-        debugPrint('Error reading metadata.txt: $e');
+        debugPrint('Error reading pages_images.txt: $e');
       }
     }
 
@@ -113,7 +120,13 @@ class StorageService {
     final targetPath = p.join(bookDirectory.path, 'page_$paddedIndex.jpg');
 
     final sourceFile = File(sourceImagePath);
-    return await sourceFile.copy(targetPath);
+    final copiedFile = await sourceFile.copy(targetPath);
+
+    // Append filename to pages_images.txt
+    final fileName = p.basename(copiedFile.path);
+    await pagesFile.writeAsString('$fileName\n', mode: FileMode.append);
+
+    return copiedFile;
   }
 
   /// Deletes a page image from the book folder and renumbers remaining pages
@@ -129,18 +142,18 @@ class StorageService {
         await file.delete();
       }
 
-      // Read current metadata.txt
-      final metadataFile = File(p.join(bookDirectory.path, 'metadata.txt'));
-      if (!await metadataFile.exists()) {
+      // Read current pages_images.txt
+      final pagesFile = File(p.join(bookDirectory.path, 'pages_images.txt'));
+      if (!await pagesFile.exists()) {
         return true;
       }
 
-      final lines = await metadataFile.readAsLines();
+      final lines = await pagesFile.readAsLines();
       final remainingFiles =
           lines.where((line) => line.trim() != fileName).toList();
 
       // Renumber remaining pages sequentially
-      final newMetadataLines = <String>[];
+      final newPages = <String>[];
       for (int i = 0; i < remainingFiles.length; i++) {
         final oldFileName = remainingFiles[i].trim();
         if (oldFileName.isEmpty) continue;
@@ -158,11 +171,11 @@ class StorageService {
           }
         }
 
-        newMetadataLines.add(newFileName);
+        newPages.add(newFileName);
       }
 
-      // Write updated metadata.txt
-      await metadataFile.writeAsString('${newMetadataLines.join('\n')}\n');
+      // Write updated pages_images.txt
+      await pagesFile.writeAsString('${newPages.join('\n')}\n');
 
       return true;
     } catch (e) {

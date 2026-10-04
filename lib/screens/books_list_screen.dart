@@ -30,20 +30,34 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _showCreateBookDialog() async {
-    final controller = TextEditingController();
+    final titleController = TextEditingController();
+    final authorsController = TextEditingController();
 
-    final String? bookTitle = await showDialog<String>(
+    final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('New Book'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Book name',
-              border: OutlineInputBorder(),
-            ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: authorsController,
+                decoration: const InputDecoration(
+                  hintText: 'Authors',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -52,8 +66,12 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                final text = controller.text.trim();
-                Navigator.pop(context, text.isEmpty ? 'New Book' : text);
+                final title = titleController.text.trim();
+                final authors = authorsController.text.trim();
+                Navigator.pop(context, {
+                  'title': title.isEmpty ? 'New Book' : title,
+                  'authors': authors,
+                });
               },
               child: const Text('Create'),
             ),
@@ -62,8 +80,15 @@ class _BookListScreenState extends State<BookListScreen> {
       },
     );
 
-    if (bookTitle != null && mounted) {
-      await StorageService.createUniqueBookDirectory(bookTitle);
+    if (result != null && mounted) {
+      final folderName = result['title']!;
+      final title = result['title']!;
+      final authors = result['authors']!;
+      await StorageService.createUniqueBookDirectory(
+        folderName: folderName,
+        title: title,
+        authors: authors,
+      );
       if (!mounted) return;
       _refreshBooks();
     }
@@ -175,11 +200,7 @@ class _BookListScreenState extends State<BookListScreen> {
                             : const Icon(Icons.book, color: Colors.grey),
                       ),
                     ),
-                    title: Text(
-                      book.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: FutureBuilder<int>(
+                    title: FutureBuilder<String>(
                       future: () async {
                         final metadata = File(
                           p.join(book.directory.path, 'metadata.txt'),
@@ -187,19 +208,70 @@ class _BookListScreenState extends State<BookListScreen> {
                         if (await metadata.exists()) {
                           try {
                             final lines = await metadata.readAsLines();
-                            return lines
-                                .where((line) => line.trim().isNotEmpty)
-                                .length;
+                            if (lines.isNotEmpty && lines[0].trim().isNotEmpty) {
+                              return lines[0].trim();
+                            }
                           } catch (e) {
-                            return book.pageFiles.length;
+                            //
                           }
                         }
-                        return book.pageFiles.length;
+                        return book.name;
                       }(),
                       builder: (context, snapshot) {
-                        final pageCount =
-                            snapshot.data ?? book.pageFiles.length;
-                        return Text('$pageCount page(s)');
+                        return Text(
+                          snapshot.data ?? book.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        );
+                      },
+                    ),
+                    subtitle: FutureBuilder<Map<String, dynamic>>(
+                      future: () async {
+                        final metadata = File(
+                          p.join(book.directory.path, 'metadata.txt'),
+                        );
+                        final pagesFile = File(
+                          p.join(book.directory.path, 'pages_images.txt'),
+                        );
+
+                        String authors = '';
+                        if (await metadata.exists()) {
+                          try {
+                            final lines = await metadata.readAsLines();
+                            if (lines.length > 1) {
+                              authors = lines[1].trim();
+                            }
+                          } catch (e) {
+                            //
+                          }
+                        }
+
+                        int pageCount = book.pageFiles.length;
+                        if (await pagesFile.exists()) {
+                          try {
+                            final lines = await pagesFile.readAsLines();
+                            pageCount =
+                                lines.where((line) => line.trim().isNotEmpty).length;
+                          } catch (e) {
+                            //
+                          }
+                        }
+
+                        return {'authors': authors, 'pageCount': pageCount};
+                      }(),
+                      builder: (context, snapshot) {
+                        final data = snapshot.data ?? {};
+                        final authors = data['authors'] as String? ?? '';
+                        final pageCount = data['pageCount'] as int? ?? 0;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (authors.isNotEmpty)
+                              Text(authors, style: const TextStyle(fontSize: 12)),
+                            Text('$pageCount page(s)',
+                                style: const TextStyle(fontSize: 12)),
+                          ],
+                        );
                       },
                     ),
                     trailing: const Icon(Icons.chevron_right),

@@ -5,20 +5,20 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('Page count logic', () {
-    test('counts lines in metadata.txt as page count', () async {
+    test('counts lines in pages_images.txt as page count', () async {
       // Setup: create a temporary book directory
       final tempDir = await Directory.systemTemp.createTemp('page_count_test_');
-      final metadataFile = File(p.join(tempDir.path, 'metadata.txt'));
+      final pagesFile = File(p.join(tempDir.path, 'pages_images.txt'));
 
-      // Create metadata.txt with 5 pages
-      await metadataFile.writeAsString(
+      // Create pages_images.txt with 5 pages
+      await pagesFile.writeAsString(
         'page_001.jpg\npage_002.jpg\npage_003.jpg\npage_004.jpg\npage_005.jpg\n',
       );
 
       // Simulate the logic that books_list_screen should use
       int pageCount;
-      if (await metadataFile.exists()) {
-        final lines = await metadataFile.readAsLines();
+      if (await pagesFile.exists()) {
+        final lines = await pagesFile.readAsLines();
         pageCount = lines.where((line) => line.trim().isNotEmpty).length;
       } else {
         pageCount = 0;

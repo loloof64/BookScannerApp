@@ -19,10 +19,10 @@ void main() {
     });
 
     test(
-      'assigns next page number based on metadata.txt, not filesystem',
+      'assigns next page number based on pages_images.txt, not filesystem',
       () async {
-        final metadataFile = File(p.join(tempDir.path, 'metadata.txt'));
-        await metadataFile.writeAsString(
+        final pagesFile = File(p.join(tempDir.path, 'pages_images.txt'));
+        await pagesFile.writeAsString(
           'page_001.jpg\npage_002.jpg\npage_003.jpg\n',
         );
 
@@ -42,7 +42,7 @@ void main() {
           expect(
             p.basename(result.path),
             'page_004.jpg',
-            reason: 'Next page should be numbered 004 based on metadata.txt',
+            reason: 'Next page should be numbered 004 based on pages_images.txt',
           );
         } finally {
           await sourceDir.delete(recursive: true);
@@ -65,8 +65,8 @@ void main() {
     });
 
     test('deletes and renumbers pages sequentially', () async {
-      final metadataFile = File(p.join(tempDir.path, 'metadata.txt'));
-      await metadataFile.writeAsString(
+      final pagesFile = File(p.join(tempDir.path, 'pages_images.txt'));
+      await pagesFile.writeAsString(
         'page_001.jpg\npage_002.jpg\npage_003.jpg\n',
       );
 
@@ -95,9 +95,9 @@ void main() {
         false,
       );
 
-      final updatedMetadata = await metadataFile.readAsString();
+      final updatedPages = await pagesFile.readAsString();
       expect(
-        updatedMetadata,
+        updatedPages,
         'page_001.jpg\npage_002.jpg\n',
       );
     });

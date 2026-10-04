@@ -7,17 +7,17 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('BookListScreen', () {
-    testWidgets('displays page count from metadata.txt instead of file count', (
+    testWidgets('displays page count from pages_images.txt instead of file count', (
       WidgetTester tester,
     ) async {
-      // Setup: create a temporary book directory with metadata.txt
+      // Setup: create a temporary book directory with pages_images.txt
       final tempDir = await Directory.systemTemp.createTemp('book_test_');
       final bookDir = Directory(p.join(tempDir.path, 'TestBook'));
       await bookDir.create();
 
-      // Create metadata.txt with 5 pages
-      final metadataFile = File(p.join(bookDir.path, 'metadata.txt'));
-      await metadataFile.writeAsString(
+      // Create pages_images.txt with 5 pages
+      final pagesFile = File(p.join(bookDir.path, 'pages_images.txt'));
+      await pagesFile.writeAsString(
         'page_001.jpg\npage_002.jpg\npage_003.jpg\n'
         'page_004.jpg\npage_005.jpg\n',
       );
@@ -43,12 +43,12 @@ void main() {
                   title: Text(book.name),
                   subtitle: FutureBuilder<int>(
                     future: () async {
-                      final metadata = File(
-                        p.join(book.directory.path, 'metadata.txt'),
+                      final pagesFile = File(
+                        p.join(book.directory.path, 'pages_images.txt'),
                       );
-                      if (await metadata.exists()) {
+                      if (await pagesFile.exists()) {
                         try {
-                          final lines = await metadata.readAsLines();
+                          final lines = await pagesFile.readAsLines();
                           return lines
                               .where((line) => line.trim().isNotEmpty)
                               .length;
@@ -72,7 +72,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify: should show 5 pages from metadata.txt, not 3 from actual files
+      // Verify: should show 5 pages from pages_images.txt, not 3 from actual files
       expect(find.text('5 page(s)'), findsOneWidget);
 
       // Cleanup
