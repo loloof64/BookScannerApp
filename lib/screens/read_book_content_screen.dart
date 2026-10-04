@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/book_model.dart';
 import 'add_scan_to_book_screen.dart';
@@ -34,7 +35,9 @@ class _ReadBookContentState extends State<ReadBookContent> {
     final List<String> files = [];
 
     // Read metadata.txt to get the order of images
-    final metadataFile = File('${widget.book.name}/metadata.txt');
+    final metadataFile = File(
+      p.join(widget.book.directory.path, 'metadata.txt'),
+    );
 
     if (await metadataFile.exists()) {
       try {
@@ -42,7 +45,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
         for (final line in lines) {
           final fileName = line.trim();
           if (fileName.isNotEmpty) {
-            final file = File('${widget.book.name}/$fileName');
+            final file = File(p.join(widget.book.directory.path, fileName));
             if (await file.exists()) {
               files.add(fileName);
             }
@@ -129,7 +132,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
             itemCount: imageFiles.length,
             itemBuilder: (context, index) {
               final fileName = imageFiles[index];
-              final file = File('${widget.book.name}/$fileName');
+              final file = File(p.join(widget.book.name, fileName));
 
               return GestureDetector(
                 onTap: () {
