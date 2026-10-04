@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 import 'package:book_scanner_app/screens/read_book_content_screen.dart';
 import 'package:flutter/material.dart';
 
@@ -139,7 +142,28 @@ class _BookListScreenState extends State<BookListScreen> {
                     book.name,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  subtitle: Text('${book.pageFiles.length} page(s)'),
+                  subtitle: FutureBuilder<int>(
+                    future: () async {
+                      final metadata = File(
+                        p.join(book.directory.path, 'metadata.txt'),
+                      );
+                      if (await metadata.exists()) {
+                        try {
+                          final lines = await metadata.readAsLines();
+                          return lines
+                              .where((line) => line.trim().isNotEmpty)
+                              .length;
+                        } catch (e) {
+                          return book.pageFiles.length;
+                        }
+                      }
+                      return book.pageFiles.length;
+                    }(),
+                    builder: (context, snapshot) {
+                      final pageCount = snapshot.data ?? book.pageFiles.length;
+                      return Text('$pageCount page(s)');
+                    },
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     await Navigator.push(
