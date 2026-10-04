@@ -202,14 +202,17 @@ class _ReadBookContentState extends State<ReadBookContent> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) =>
                   AddScanToBookScreen(targetBook: widget.book),
             ),
           );
+          if (result == true) {
+            _loadImageFiles();
+          }
         },
         child: const Icon(Icons.add),
       ),
