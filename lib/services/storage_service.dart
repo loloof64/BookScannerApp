@@ -115,4 +115,32 @@ class StorageService {
     final sourceFile = File(sourceImagePath);
     return await sourceFile.copy(targetPath);
   }
+
+  /// Deletes a page image from the book folder and updates metadata.txt
+  static Future<bool> deletePageFromBook({
+    required Directory bookDirectory,
+    required String fileName,
+  }) async {
+    try {
+      final filePath = p.join(bookDirectory.path, fileName);
+      final file = File(filePath);
+
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      final metadataFile = File(p.join(bookDirectory.path, 'metadata.txt'));
+      if (await metadataFile.exists()) {
+        final lines = await metadataFile.readAsLines();
+        final updatedLines =
+            lines.where((line) => line.trim() != fileName).toList();
+        await metadataFile.writeAsString(updatedLines.join('\n'));
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting page: $e');
+      return false;
+    }
+  }
 }
