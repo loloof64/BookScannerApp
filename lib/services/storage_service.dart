@@ -134,7 +134,7 @@ class StorageService {
         final lines = await metadataFile.readAsLines();
         final updatedLines =
             lines.where((line) => line.trim() != fileName).toList();
-        await metadataFile.writeAsString(updatedLines.join('\n'));
+        await metadataFile.writeAsString('${updatedLines.join('\n')}\n');
       }
 
       return true;
