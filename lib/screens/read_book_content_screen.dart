@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:path/path.dart' as p;
+import 'package:pdf/widgets.dart' as pw;
 
 import '../models/book_model.dart';
 import '../services/storage_service.dart';
@@ -105,8 +105,8 @@ class _ReadBookContentState extends State<ReadBookContent> {
     return {'title': title, 'authors': authors};
   }
 
-  /// Downscales (max 1800px) and re-encodes as JPEG q80 (~250 KB/page) so
-  /// 400 pages stay around 100 MB in memory. Also bakes in EXIF rotation.
+  /// Downscales (max 1800px) and re-encodes as JPEG q70. Also bakes in EXIF
+  /// rotation.
   Future<Uint8List> _compressPage(String path) async {
     final img = await cv.imreadAsync(path);
     cv.Mat? small;
@@ -123,7 +123,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
       final (_, bytes) = await cv.imencodeAsync(
         '.jpg',
         small ?? img,
-        params: cv.VecI32.fromList([cv.IMWRITE_JPEG_QUALITY, 80]),
+        params: cv.VecI32.fromList([cv.IMWRITE_JPEG_QUALITY, 70]),
       );
       return bytes;
     } finally {
@@ -181,11 +181,13 @@ class _ReadBookContentState extends State<ReadBookContent> {
         dialogTitle: 'Export PDF',
         fileName: '$safeTitle.pdf',
         bytes: pdfBytes,
+        mimeType: 'application/pdf',
       );
       if (path != null) {
         messenger.showSnackBar(const SnackBar(content: Text('PDF exported')));
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('PDF export failed: $e\n$st');
       if (mounted) Navigator.popUntil(context, (r) => r is! PopupRoute);
       messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
