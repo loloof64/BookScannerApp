@@ -245,6 +245,8 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Page added successfully!')));
+
+      Navigator.pop(context);
     } catch (e) {
       setState(() => _isLoading = false);
       debugPrint('Error saving image: $e');
