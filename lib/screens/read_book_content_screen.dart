@@ -137,7 +137,6 @@ class _ReadBookContentState extends State<ReadBookContent> {
 
               return GestureDetector(
                 onTap: () {
-                  // Navigate to full-screen view
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -150,6 +149,7 @@ class _ReadBookContentState extends State<ReadBookContent> {
                     ),
                   );
                 },
+                onLongPress: () => _showDeleteOptions(context, fileName),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6.0),
                   child: Image.file(
@@ -167,7 +167,6 @@ class _ReadBookContentState extends State<ReadBookContent> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navigate to add scan to book page
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -179,6 +178,47 @@ class _ReadBookContentState extends State<ReadBookContent> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  void _showDeleteOptions(BuildContext context, String fileName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Image'),
+        content: Text('Delete "$fileName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteImage(context, fileName),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteImage(BuildContext context, String fileName) async {
+    Navigator.pop(context);
+    final success = await StorageService.deletePageFromBook(
+      bookDirectory: widget.book.directory,
+      fileName: fileName,
+    );
+
+    if (mounted) {
+      if (success) {
+        _loadImageFiles();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image deleted')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete image')),
+        );
+      }
+    }
   }
 }
 
