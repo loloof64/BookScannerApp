@@ -152,48 +152,51 @@ List<double> _spreadBands(List<double> v, int width) {
   });
 }
 
-/// One remap: output (x, y) samples source (cols[x], y + dy[x]).
+/// One remap: output (x, y) samples source (cols[x], y * (1 + tilt[x]) + shift[x]).
 Future<cv.Mat> _remapColumns(
   cv.Mat src,
   List<double> cols,
-  List<double> dy,
+  List<double> shift,
+  List<double> tilt,
 ) async {
   final w = cols.length;
-  final mapX = cv.Mat.fromList(1, w, cv.MatType.CV_32FC1, cols);
-  final mapXFull = await cv.repeatAsync(mapX, src.rows, 1);
-  final mapDy = cv.Mat.fromList(1, w, cv.MatType.CV_32FC1, dy);
-  final mapDyFull = await cv.repeatAsync(mapDy, src.rows, 1);
-  final mapY = cv.Mat.fromList(
+  Future<cv.Mat> rowMap(List<double> v) async {
+    final row = cv.Mat.fromList(1, w, cv.MatType.CV_32FC1, v);
+    final full = await cv.repeatAsync(row, src.rows, 1);
+    row.dispose();
+    return full;
+  }
+
+  final mapX = await rowMap(cols);
+  final shiftMap = await rowMap(shift);
+  final tiltMap = await rowMap(tilt);
+  final yCol = cv.Mat.fromList(
     src.rows,
     1,
     cv.MatType.CV_32FC1,
     List<double>.generate(src.rows, (y) => y.toDouble()),
   );
-  final mapYBase = await cv.repeatAsync(mapY, 1, w);
-  final mapYFull = await cv.addAsync(mapYBase, mapDyFull);
+  final y = await cv.repeatAsync(yCol, 1, w);
+  final scaled = await cv.multiplyAsync(y, tiltMap);
+  final withTilt = await cv.addAsync(y, scaled);
+  final mapY = await cv.addAsync(withTilt, shiftMap);
   final out = await cv.remapAsync(
     src,
-    mapXFull,
-    mapYFull,
+    mapX,
+    mapY,
     cv.INTER_LANCZOS4, // stretching blurs, keep it as sharp as possible
     borderMode: cv.BORDER_REPLICATE,
   );
-  for (final m in [
-    mapX,
-    mapXFull,
-    mapDy,
-    mapDyFull,
-    mapY,
-    mapYBase,
-    mapYFull,
-  ]) {
+  for (final m in [mapX, shiftMap, tiltMap, yCol, y, scaled, withTilt, mapY]) {
     m.dispose();
   }
   return out;
 }
 
-/// Estimates vertical text displacement per output column, in [src] pixels.
-Future<List<double>> _estimateDy(
+/// Estimates, per output column, how the text is displaced vertically at the
+/// top and bottom of the page, as the (shift, tilt) of the remap above: the
+/// 'horn' effect makes top lines go up while bottom lines go down.
+Future<(List<double>, List<double>)> _estimateVertical(
   cv.Mat src,
   List<double> weights,
   int outWidth,
@@ -208,6 +211,7 @@ Future<List<double>> _estimateDy(
   final unrolledSmall = await _remapColumns(
     small,
     unrollColumns(weights, analysisWidth, smallOutW),
+    zero,
     zero,
   );
 
@@ -226,11 +230,13 @@ Future<List<double>> _estimateDy(
   ), interpolation: cv.INTER_AREA);
   final d = bandsMat.data;
   final h = ink.rows;
-  final bands = [
+  List<List<double>> strips(int from, int to) => [
     for (var b = 0; b < nb; b++)
-      [for (var y = 0; y < h; y++) d[y * nb + b].toDouble()],
+      [for (var y = from; y < to; y++) d[y * nb + b].toDouble()],
   ];
-  final dySmall = verticalShifts(bands, math.max(2, h ~/ 100));
+  final maxStep = math.max(2, h ~/ 100);
+  final top = verticalShifts(strips(0, h ~/ 2), maxStep);
+  final bottom = verticalShifts(strips(h ~/ 2, h), maxStep);
 
   for (final m in [
     small,
@@ -245,8 +251,18 @@ Future<List<double>> _estimateDy(
   ]) {
     m.dispose();
   }
+  // top/bottom displacement measured at the middle of each half; fit a line in y
   final scale = src.rows / h;
-  return [for (final v in _spreadBands(dySmall, outWidth)) v * scale];
+  final yTop = src.rows * 0.25, yBottom = src.rows * 0.75;
+  final dTop = _spreadBands(top, outWidth);
+  final dBottom = _spreadBands(bottom, outWidth);
+  final tilt = <double>[], shift = <double>[];
+  for (var x = 0; x < outWidth; x++) {
+    final t = (dBottom[x] - dTop[x]) * scale / (yBottom - yTop);
+    tilt.add(t);
+    shift.add(dTop[x] * scale - t * yTop);
+  }
+  return (shift, tilt);
 }
 
 /// Unrolls gutter curvature (both axes), flattens the lighting, saves `<name>_flat.jpg`.
@@ -283,13 +299,15 @@ Future<String?> flattenPage(
 
     // 2. Vertical shift per column so curved text lines become straight,
     //    then a single remap for both axes (each resample costs sharpness)
-    final dy = straightenLines
-        ? await _estimateDy(img, weights, outWidth)
-        : List<double>.filled(outWidth, 0);
-    unrolled = await _remapColumns(img, cols, dy);
+    final zero = List<double>.filled(outWidth, 0);
+    final (shift, tilt) = straightenLines
+        ? await _estimateVertical(img, weights, outWidth)
+        : (zero, zero);
+    unrolled = await _remapColumns(img, cols, shift, tilt);
     debugPrint(
       'flattenPage: ${img.cols}px -> ${outWidth}px, '
-      'dy ${dy.reduce(math.min).toStringAsFixed(1)}..${dy.reduce(math.max).toStringAsFixed(1)}px',
+      'shift ${shift.reduce(math.min).toStringAsFixed(1)}..${shift.reduce(math.max).toStringAsFixed(1)}px, '
+      'tilt max ${tilt.map((t) => t.abs()).reduce(math.max).toStringAsFixed(3)}',
     );
 
     // 3. Lighting: divide by the text-free paper estimate
