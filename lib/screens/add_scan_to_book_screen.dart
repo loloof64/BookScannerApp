@@ -7,6 +7,7 @@ import '../models/book_model.dart';
 import '../services/storage_service.dart';
 import 'crop_overlay_screen.dart';
 import 'crop_preview_screen.dart';
+import 'flatten_preview_screen.dart';
 
 class AddScanToBookScreen extends StatefulWidget {
   final BookModel
@@ -75,8 +76,20 @@ class _AddScanToBookScreenState extends State<AddScanToBookScreen> {
         );
 
         if (processedImagePath != null && processedImagePath is String) {
-          // User confirmed crop, save the image
-          await _saveImage(processedImagePath);
+          if (!mounted) return;
+          // Second confirmation: gutter/lighting correction
+          final finalPath = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  FlattenPreviewScreen(croppedPath: processedImagePath),
+            ),
+          );
+          if (finalPath is String) {
+            await _saveImage(finalPath);
+          } else {
+            setState(() => _pickedImagePath = _pickedImagePath);
+          }
         } else {
           // User clicked Redo Crop, stay on this screen
           setState(() => _pickedImagePath = _pickedImagePath);
