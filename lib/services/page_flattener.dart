@@ -112,7 +112,7 @@ Future<String?> flattenPage(String imagePath) async {
       img,
       mapXFull,
       mapYFull,
-      cv.INTER_LINEAR,
+      cv.INTER_LANCZOS4, // stretching blurs, keep it as sharp as possible
       borderMode: cv.BORDER_REPLICATE,
     );
     for (final m in [mapX, mapXFull, mapY, mapYFull]) {
@@ -123,7 +123,13 @@ Future<String?> flattenPage(String imagePath) async {
     // 2. Lighting: divide by the text-free paper estimate
     paper2 = await _paperSmall(unrolled);
     background = await cv.resizeAsync(paper2, (unrolled.cols, unrolled.rows));
-    flat = await cv.divideAsync(unrolled, background, scale: 255);
+    final divided = await cv.divideAsync(unrolled, background, scale: 255);
+
+    // 3. Unsharp mask to win back the sharpness lost where columns were stretched
+    final soft = await cv.gaussianBlurAsync(divided, (0, 0), 2);
+    flat = await cv.addWeightedAsync(divided, 1.8, soft, -0.8, 0);
+    divided.dispose();
+    soft.dispose();
 
     final outputPath = p.join(
       p.dirname(imagePath),
