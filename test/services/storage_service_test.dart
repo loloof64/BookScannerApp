@@ -29,7 +29,9 @@ void main() {
         await File(p.join(tempDir.path, 'page_001.jpg')).create();
         await File(p.join(tempDir.path, 'page_003.jpg')).create();
 
-        final sourceDir = await Directory.systemTemp.createTemp('source_image_');
+        final sourceDir = await Directory.systemTemp.createTemp(
+          'source_image_',
+        );
         final sourceImage = File(p.join(sourceDir.path, 'source.jpg'));
         await sourceImage.writeAsBytes([0xFF, 0xD8]);
 
@@ -42,7 +44,8 @@ void main() {
           expect(
             p.basename(result.path),
             'page_004.jpg',
-            reason: 'Next page should be numbered 004 based on pages_images.txt',
+            reason:
+                'Next page should be numbered 004 based on pages_images.txt',
           );
         } finally {
           await sourceDir.delete(recursive: true);
@@ -81,25 +84,16 @@ void main() {
 
       expect(result, true);
 
-      expect(
-        await File(p.join(tempDir.path, 'page_001.jpg')).exists(),
-        true,
-      );
+      expect(await File(p.join(tempDir.path, 'page_001.jpg')).exists(), true);
       expect(
         await File(p.join(tempDir.path, 'page_002.jpg')).exists(),
         true,
         reason: 'old page_003.jpg should be renamed to page_002.jpg',
       );
-      expect(
-        await File(p.join(tempDir.path, 'page_003.jpg')).exists(),
-        false,
-      );
+      expect(await File(p.join(tempDir.path, 'page_003.jpg')).exists(), false);
 
       final updatedPages = await pagesFile.readAsString();
-      expect(
-        updatedPages,
-        'page_001.jpg\npage_002.jpg\n',
-      );
+      expect(updatedPages, 'page_001.jpg\npage_002.jpg\n');
     });
   });
 }

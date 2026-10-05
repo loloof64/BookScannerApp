@@ -27,4 +27,20 @@ void main() {
     // gutter part: output advances faster than source
     expect(c.last - c[out - 100], lessThan(100));
   });
+
+  test('verticalShifts recovers a progressive downward bend', () {
+    const h = 300;
+    List<double> lines(int shift) => [
+      for (var y = 0; y < h; y++)
+        ((y - shift) % 30 < 8) ? 255.0 : 0.0, // text lines every 30px
+    ];
+    // 11 bands, content sags 1px more per band right of centre (band 5)
+    final bands = [
+      for (var b = 0; b < 11; b++) lines(b <= 5 ? 0 : (b - 5) * 2),
+    ];
+    final dy = verticalShifts(bands, 5);
+    expect(dy[5], closeTo(0, 1));
+    expect(dy[10], closeTo(10, 1));
+    expect(dy[0], closeTo(0, 1));
+  });
 }

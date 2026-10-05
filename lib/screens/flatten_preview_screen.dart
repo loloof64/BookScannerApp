@@ -20,16 +20,26 @@ class _FlattenPreviewScreenState extends State<FlattenPreviewScreen> {
   String? _flatPath;
   bool _loading = true;
   bool _showOriginal = false;
+  bool _straighten = true;
+  bool _sharpen = true;
 
   @override
   void initState() {
     super.initState();
-    flattenPage(widget.croppedPath).then((path) {
-      if (!mounted) return;
-      setState(() {
-        _flatPath = path;
-        _loading = false;
-      });
+    _run();
+  }
+
+  Future<void> _run() async {
+    setState(() => _loading = true);
+    final path = await flattenPage(
+      widget.croppedPath,
+      straightenLines: _straighten,
+      sharpen: _sharpen,
+    );
+    if (!mounted) return;
+    setState(() {
+      _flatPath = path;
+      _loading = false;
     });
   }
 
@@ -55,6 +65,27 @@ class _FlattenPreviewScreenState extends State<FlattenPreviewScreen> {
                       child: Image.file(File(shown), fit: BoxFit.contain),
                     ),
                   ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('Straight lines'),
+                      selected: _straighten,
+                      onSelected: (v) {
+                        _straighten = v;
+                        _run();
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Sharpen'),
+                      selected: _sharpen,
+                      onSelected: (v) {
+                        _sharpen = v;
+                        _run();
+                      },
+                    ),
+                  ],
                 ),
                 if (flat != null)
                   SegmentedButton<bool>(
