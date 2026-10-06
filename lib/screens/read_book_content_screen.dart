@@ -494,7 +494,6 @@ class _ReadBookContentState extends State<ReadBookContent> {
   }
 
   Future<void> _deleteImage(String fileName) async {
-    Navigator.pop(context);
     final success = await StorageService.deletePageFromBook(
       bookDirectory: widget.book.directory,
       fileName: fileName,
