@@ -152,13 +152,18 @@ List<double> _spreadBands(List<double> v, int width) {
   });
 }
 
-/// One remap: output (x, y) samples source (cols[x], y * (1 + tilt[x]) + shift[x]).
+/// One remap: output (x, y) samples source (cols[x], y + shift(x, y)) with
+/// shift = c0[x] + c1[x] * y + c2[x] * g(y), g(y) = 2·yc·y − yc² (yc = y clamped
+/// to the measured zone), i.e. quadratic inside it and linear beyond its ends.
 Future<cv.Mat> _remapColumns(
   cv.Mat src,
   List<double> cols,
-  List<double> shift,
-  List<double> tilt,
-) async {
+  List<double> c0,
+  List<double> c1,
+  List<double> c2, {
+  double yMin = 0,
+  double yMax = 0,
+}) async {
   final w = cols.length;
   Future<cv.Mat> rowMap(List<double> v) async {
     final row = cv.Mat.fromList(1, w, cv.MatType.CV_32FC1, v);
@@ -167,19 +172,32 @@ Future<cv.Mat> _remapColumns(
     return full;
   }
 
+  Future<cv.Mat> colMap(double Function(int y) f) async {
+    final col = cv.Mat.fromList(
+      src.rows,
+      1,
+      cv.MatType.CV_32FC1,
+      List<double>.generate(src.rows, (y) => f(y)),
+    );
+    final full = await cv.repeatAsync(col, 1, w);
+    col.dispose();
+    return full;
+  }
+
   final mapX = await rowMap(cols);
-  final shiftMap = await rowMap(shift);
-  final tiltMap = await rowMap(tilt);
-  final yCol = cv.Mat.fromList(
-    src.rows,
-    1,
-    cv.MatType.CV_32FC1,
-    List<double>.generate(src.rows, (y) => y.toDouble()),
-  );
-  final y = await cv.repeatAsync(yCol, 1, w);
-  final scaled = await cv.multiplyAsync(y, tiltMap);
-  final withTilt = await cv.addAsync(y, scaled);
-  final mapY = await cv.addAsync(withTilt, shiftMap);
+  final c0Map = await rowMap(c0);
+  final c1Map = await rowMap(c1);
+  final c2Map = await rowMap(c2);
+  final y = await colMap((y) => y.toDouble());
+  final g = await colMap((y) {
+    final yc = y.toDouble().clamp(yMin, yMax);
+    return 2 * yc * y - yc * yc;
+  });
+  final t1 = await cv.multiplyAsync(c1Map, y);
+  final t2 = await cv.multiplyAsync(c2Map, g);
+  final s1 = await cv.addAsync(y, c0Map);
+  final s2 = await cv.addAsync(s1, t1);
+  final mapY = await cv.addAsync(s2, t2);
   final out = await cv.remapAsync(
     src,
     mapX,
@@ -187,20 +205,18 @@ Future<cv.Mat> _remapColumns(
     cv.INTER_LANCZOS4, // stretching blurs, keep it as sharp as possible
     borderMode: cv.BORDER_REPLICATE,
   );
-  for (final m in [mapX, shiftMap, tiltMap, yCol, y, scaled, withTilt, mapY]) {
+  for (final m in [mapX, c0Map, c1Map, c2Map, y, g, t1, t2, s1, s2, mapY]) {
     m.dispose();
   }
   return out;
 }
 
 /// Estimates, per output column, how the text is displaced vertically at the
-/// top and bottom of the page, as the (shift, tilt) of the remap above: the
-/// 'horn' effect makes top lines go up while bottom lines go down.
-Future<(List<double>, List<double>)> _estimateVertical(
-  cv.Mat src,
-  List<double> weights,
-  int outWidth,
-) async {
+/// top, middle and bottom of the page, as the (c0, c1, c2, yMin, yMax) of the
+/// remap above: the 'horn' effect makes top lines go up while bottom lines go
+/// down, and near the fold that bend is not linear in y.
+Future<(List<double>, List<double>, List<double>, double, double)>
+_estimateVertical(cv.Mat src, List<double> weights, int outWidth) async {
   const analysisWidth = 900;
   final small = await cv.resizeAsync(src, (
     analysisWidth,
@@ -211,6 +227,7 @@ Future<(List<double>, List<double>)> _estimateVertical(
   final unrolledSmall = await _remapColumns(
     small,
     unrollColumns(weights, analysisWidth, smallOutW),
+    zero,
     zero,
     zero,
   );
@@ -235,8 +252,9 @@ Future<(List<double>, List<double>)> _estimateVertical(
       [for (var y = from; y < to; y++) d[y * nb + b].toDouble()],
   ];
   final maxStep = math.max(2, h ~/ 100);
-  final top = verticalShifts(strips(0, h ~/ 2), maxStep);
-  final bottom = verticalShifts(strips(h ~/ 2, h), maxStep);
+  final top = verticalShifts(strips(0, h ~/ 3), maxStep);
+  final mid = verticalShifts(strips(h ~/ 3, 2 * h ~/ 3), maxStep);
+  final bottom = verticalShifts(strips(2 * h ~/ 3, h), maxStep);
 
   for (final m in [
     small,
@@ -251,18 +269,23 @@ Future<(List<double>, List<double>)> _estimateVertical(
   ]) {
     m.dispose();
   }
-  // top/bottom displacement measured at the middle of each half; fit a line in y
+  // displacement measured at the middle of each third; fit a parabola in y
   final scale = src.rows / h;
-  final yTop = src.rows * 0.25, yBottom = src.rows * 0.75;
-  final dTop = _spreadBands(top, outWidth);
-  final dBottom = _spreadBands(bottom, outWidth);
-  final tilt = <double>[], shift = <double>[];
+  final y1 = src.rows / 6, y2 = src.rows / 2, y3 = src.rows * 5 / 6;
+  final d1 = _spreadBands(top, outWidth);
+  final d2 = _spreadBands(mid, outWidth);
+  final d3 = _spreadBands(bottom, outWidth);
+  final c0 = <double>[], c1 = <double>[], c2 = <double>[];
   for (var x = 0; x < outWidth; x++) {
-    final t = (dBottom[x] - dTop[x]) * scale / (yBottom - yTop);
-    tilt.add(t);
-    shift.add(dTop[x] * scale - t * yTop);
+    final a = d1[x] * scale, b = d2[x] * scale, c = d3[x] * scale;
+    final f12 = (b - a) / (y2 - y1), f23 = (c - b) / (y3 - y2);
+    final q = (f23 - f12) / (y3 - y1);
+    final l = f12 - q * (y1 + y2);
+    c0.add(a - l * y1 - q * y1 * y1);
+    c1.add(l);
+    c2.add(q);
   }
-  return (shift, tilt);
+  return (c0, c1, c2, y1, y3);
 }
 
 /// Unrolls gutter curvature (both axes), flattens the lighting, saves `<name>_flat.jpg`.
@@ -300,14 +323,23 @@ Future<String?> flattenPage(
     // 2. Vertical shift per column so curved text lines become straight,
     //    then a single remap for both axes (each resample costs sharpness)
     final zero = List<double>.filled(outWidth, 0);
-    final (shift, tilt) = straightenLines
+    final (c0, c1, c2, yMin, yMax) = straightenLines
         ? await _estimateVertical(img, weights, outWidth)
-        : (zero, zero);
-    unrolled = await _remapColumns(img, cols, shift, tilt);
+        : (zero, zero, zero, 0.0, 0.0);
+    unrolled = await _remapColumns(
+      img,
+      cols,
+      c0,
+      c1,
+      c2,
+      yMin: yMin,
+      yMax: yMax,
+    );
     debugPrint(
       'flattenPage: ${img.cols}px -> ${outWidth}px, '
-      'shift ${shift.reduce(math.min).toStringAsFixed(1)}..${shift.reduce(math.max).toStringAsFixed(1)}px, '
-      'tilt max ${tilt.map((t) => t.abs()).reduce(math.max).toStringAsFixed(3)}',
+      'c0 ${c0.reduce(math.min).toStringAsFixed(1)}..${c0.reduce(math.max).toStringAsFixed(1)}, '
+      'c1 max ${c1.map((t) => t.abs()).reduce(math.max).toStringAsFixed(3)}, '
+      'c2 max ${c2.map((t) => t.abs()).reduce(math.max).toStringAsExponential(1)}',
     );
 
     // 3. Lighting: divide by the text-free paper estimate

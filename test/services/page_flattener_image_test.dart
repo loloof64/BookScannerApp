@@ -118,4 +118,43 @@ void main() {
     expect((firstDark(r.cols - 15) - firstDark(300)).abs(), lessThan(8));
     expect((lastDark(r.cols - 15) - lastDark(300)).abs(), lessThan(8));
   });
+
+  test('flattenPage corrects a bow near the fold (middle lines pushed down)', () async {
+    final dir = Directory.systemTemp.createTempSync('flat');
+    final m = cv.Mat.zeros(600, 800, cv.MatType.CV_8UC3);
+    cv.rectangle(
+      m,
+      cv.Rect(0, 0, 800, 600),
+      cv.Scalar(235, 235, 235, 0),
+      thickness: -1,
+    );
+    // right of x=600 the middle lines sag up to 20px, top/bottom lines stay put
+    for (var x = 0; x < 800; x++) {
+      final k = x < 600 ? 0.0 : (x - 600) / 200;
+      for (var line = 0; line < 13; line++) {
+        final y0 = 40 + line * 40;
+        final u = (y0 - 300) / 260;
+        final y = y0 + (k * 20 * (1 - u * u)).round();
+        cv.line(
+          m,
+          cv.Point(x, y),
+          cv.Point(x, y + 8),
+          cv.Scalar(30, 30, 30, 0),
+        );
+      }
+    }
+    final path = '${dir.path}/page.jpg';
+    cv.imwrite(path, m);
+
+    final r = cv.imread((await flattenPage(path))!);
+    // first dark row at or below y=270 (the centre line sits at 280..288 in the source)
+    int midLine(int x) {
+      for (var y = 255; y < r.rows; y++) {
+        if (r.at<cv.Vec3b>(y, x).val1 < 120) return y;
+      }
+      return -1;
+    }
+
+    expect((midLine(r.cols - 15) - midLine(300)).abs(), lessThan(8));
+  });
 }
